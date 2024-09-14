@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+    <meta http-equiv="Content-type" content="text/html;charset=UTF-8" />
+    <title>HERE Map - Display Route</title>
+    <link rel="stylesheet" type="text/css" href="https://js.api.here.com/v3/3.1/mapsjs-ui.css" />
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-core.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-service.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"></script>
+    <script type="text/javascript" src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        #map {
+            width: 100%;
+            height: 500px;
+            background: grey;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <p>From </p>
+    <input type="text" placeholder="Latitude" id="Fromltt">
+    <input type="text" placeholder="Longitude" id="Fromlng">
+
+    <p>To</p>
+    <input type="text" placeholder="Latitude" id="toltt">
+    <input type="text" placeholder="Longitude" id="tolng">
+
+    <button onclick="getpolyline()">Plot</button>
+
+    <button onclick="search()">Get nearby College</button>
+
+    <script>
+        // Step 1: Initialize the platform object with your API key
+        var platform = new H.service.Platform({
+            apikey: "fehqzuH0NAHbTuhr3voJhFiQJ3aOuSxliozD6UPe8TI",
+        });
+
+        // Obtain the default map types from the platform object
+        var defaultLayers = platform.createDefaultLayers();
+
+        // Step 2: Initialize a map centered over a specific location
+        var map = new H.Map(
+            document.getElementById("map"),
+            defaultLayers.vector.normal.map,
+            {
+                center: { lat: 17.2818, lng: 78.5378 },
+                zoom: 14,
+                pixelRatio: window.devicePixelRatio || 1,
+            }
+        );
+
+        // Add a resize listener to make sure that the map occupies the whole container
+        window.addEventListener("resize", () => map.getViewPort().resize());
+
+        // Step 3: Make the map interactive
+        var behavior = new H.mapevents.Behavior(new H.mapevents.MapEvents(map));
+
+        // Create the default UI components
+        var ui = H.ui.UI.createDefault(map, defaultLayers);
+
+        function getpolyline(){
+            let fromlatitude = document.getElementById("Fromltt").value;
+            let fromlongitude = document.getElementById("Fromlng").value;
+            let tolatitude = document.getElementById("toltt").value;
+            let tolongitude = document.getElementById("tolng").value;
+
+            var settings = {
+                url: `https://router.hereapi.com/v8/routes?transportMode=car&origin=${fromlatitude},${fromlongitude}&destination=${tolatitude},${tolongitude}&return=polyline&apiKey=fehqzuH0NAHbTuhr3voJhFiQJ3aOuSxliozD6UPe8TI`,
+                method: "GET",
+                timeout: 0,
+            };
+
+            $.ajax(settings).done(function (response) {
+                var encodedPolyline = response.routes[0].sections[0].polyline;
+
+                // Create the polyline from the encoded string
+                var polyline = H.geo.LineString.fromFlexiblePolyline(encodedPolyline);
+
+                // Create a polyline object and add it to the map
+                var routeLine = new H.map.Polyline(polyline, {
+                    style: { strokeColor: "blue", lineWidth: 5 },
+                });
+
+                map.addObject(routeLine);
+
+                // Adjust the map's viewport to ensure the route is visible
+                map.getViewModel().setLookAtData({ bounds: routeLine.getBoundingBox() });
+
+                // Create and add markers with popups
+                var originMarker = new H.map.Marker({ lat: fromlatitude, lng: fromlongitude });
+                var destinationMarker = new H.map.Marker({ lat: tolatitude, lng: tolongitude });
+
+                // Add markers to the map
+                map.addObject(originMarker);
+                map.addObject(destinationMarker);
+
+                // Define the content for popups
+                var originPopup = new H.ui.InfoBubble({ lat: fromlatitude, lng: fromlongitude }, {
+                    content: '<div><strong>Origin</strong><br>Latitude: ' + fromlatitude + '<br>Longitude: ' + fromlongitude + '</div>'
+                });
+
+                var destinationPopup = new H.ui.InfoBubble({ lat: tolatitude, lng: tolongitude }, {
+                    content: '<div><strong>Destination</strong><br>Latitude: ' + tolatitude + '<br>Longitude: ' + tolongitude + '</div>'
+                });
+
+                // Attach event listeners to markers
+                originMarker.addEventListener('tap', function() {
+                    // ui.getBubble().close(); // Close any open bubbles
+                    ui.addBubble(originPopup);
+                });
+
+                destinationMarker.addEventListener('tap', function() {
+                    // ui.getBubble().close(); // Close any open bubbles
+                    ui.addBubble(destinationPopup);
+                });
+            });
+        }
+
+        
+        var currentMarker = null;
+        var currentBubble = null;
+        map.addEventListener('tap', function(event) {
+            var coord = map.screenToGeo(event.currentPointer.viewportX, event.currentPointer.viewportY);
+
+            var marker = new H.map.Marker(coord);
+
+            var infoBubble = new H.ui.InfoBubble(coord, {
+                content: `<div><strong>Location</strong><br>Latitude: ${coord.lat.toFixed(4)}<br>Longitude: ${coord.lng.toFixed(4)}</div>`
+            });
+
+
+            if(currentMarker){
+                map.removeObject(currentMarker);
+            }
+            
+            currentMarker = marker;
+            map.addObject(currentMarker);
+
+            marker.addEventListener('tap', function() {
+                ui.getBubble().close(); 
+            });
+        });
+
+        function search(){
+            var searchapi = {
+                url:`https://autosuggest.search.hereapi.com/v1/autosuggest?at=${currentMarker.getGeometry().lat.toFixed(4)},${currentMarker.getGeometry().lng.toFixed(4)}&q=place&limit=1&apikey=API_KEY`,
+                method: "GET",
+                timeout: 0,
+            };
+            $.ajax(searchapi).done(function (response) {
+                console.log(response);
+                response.items.forEach(item => {
+                    collegename = item.title;
+                    address = item.address.label;
+                    latitude = item.position.lat;
+                    longitude = item.position.lng;
+                    var point = new H.geo.Point(latitude, longitude);
+                    var displaycontent = `<div><strong>Name</strong><br>${collegename}<br><strong>Address</strong><br>${address}<br>Latitude: ${latitude}<br>Longitude: ${longitude}</div>`;
+                    var infoBubble = new H.ui.InfoBubble(point, {
+                        content: displaycontent
+                    });
+
+                    if(currentBubble){
+                        ui.removeBubble(currentBubble);
+                        currentBubble = infoBubble;
+                    }
+                    // ui.addBubble(currentBubble);
+                });
+            });
+        }
+    
+    </script>
+    </script>
+</body>
+</html>
